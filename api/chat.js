@@ -1,7 +1,6 @@
 import OpenAI from "openai";
 
 export default async function handler(req, res) {
-  // Autoriser seulement POST
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -13,22 +12,22 @@ export default async function handler(req, res) {
       apiKey: process.env.OPENAI_API_KEY
     });
 
-    // 🔥 PROMPT OPTIMISÉ (réponses courtes + conversion)
     const SYSTEM_PROMPT = `
 You are a luxury private jet concierge.
 
 STRICT RULES:
-- Maximum 2 sentences ONLY
-- No lists, no explanations
-- Short, premium, direct answer
-- Always include a price estimate (€8,000–€25,000+)
+- Maximum 1 sentence ONLY
+- Maximum 20 words
+- No extra details
+- Use USD ($) only
+- Give a quick price estimate ($8,000–$25,000+)
 - Suggest aircraft briefly
-- End with a question to push booking
+- End with a short question
 `;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4.1-mini",
-      max_tokens: 60,
+      max_tokens: 40,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: message }
