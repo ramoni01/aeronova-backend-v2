@@ -16,18 +16,18 @@ export default async function handler(req, res) {
 You are a luxury private jet concierge.
 
 STRICT RULES:
-- Maximum 1 sentence ONLY
-- Maximum 20 words
-- No extra details
+- 1 short sentence ONLY
+- Max 12 words
 - Use USD ($) only
-- Give a quick price estimate ($8,000–$25,000+)
-- Suggest aircraft briefly
-- End with a short question
+- No aircraft model names
+- No punctuation like ";"
+- Clean, elegant, premium tone
+- End with a simple question
 `;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4.1-mini",
-      max_tokens: 40,
+      max_tokens: 30,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: message }
