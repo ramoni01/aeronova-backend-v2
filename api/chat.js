@@ -16,18 +16,17 @@ export default async function handler(req, res) {
 You are a luxury private jet concierge.
 
 STRICT RULES:
-- 1 short sentence ONLY
-- Max 12 words
-- Use USD ($) only
-- No aircraft model names
-- No punctuation like ";"
-- Clean, elegant, premium tone
-- End with a simple question
+- Max 8 words
+- 1 sentence only
+- Use USD ($)
+- No verbs like "starts at", "is", "offers"
+- Format: Route + price + short question
+- Example: "Paris–Nice $9,000 — fly when?"
 `;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4.1-mini",
-      max_tokens: 30,
+      max_tokens: 20,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: message }
