@@ -15,7 +15,6 @@ export default async function handler(req, res) {
       apiKey: process.env.OPENAI_API_KEY
     });
 
-    // 💰 Estimation prix simple
     let priceEstimate = "";
 
     if (departure && destination) {
@@ -30,16 +29,9 @@ Empty legs available (up to 75% discount).
 
     const SYSTEM_PROMPT = `
 You are a luxury private aviation concierge for AeroNova.
-
-Rules:
-- Speak in a premium, concise tone (max 2 sentences)
-- Collect: departure city, destination, travel date, email
-- Suggest best aircraft
-- Include price estimation when available
-- Encourage booking
+Speak in a premium, concise tone.
 `;
 
-    // 🤖 OpenAI response
     const completion = await openai.chat.completions.create({
       model: "gpt-4.1-mini",
       messages: [
@@ -52,64 +44,52 @@ Rules:
     const reply = completion.choices[0].message.content;
 
     // =========================
-    // 📊 GOOGLE SHEETS SAVE
+    // 📊 GOOGLE SHEETS (SAFE)
     // =========================
-    await fetch("https://script.google.com/macros/s/AKfycbxavit4SMkqMPvw5EUgLYGjaqfKMjMuM5RVDxhcndM7DQRTicsUBonQNVGZJsGD6aoKfg/exec", {
-      method: "POST",
-      body: JSON.stringify({
-        message,
-        email: email || "",
-        departure: departure || "",
-        destination: destination || "",
-        date: new Date().toISOString()
-      })
-    });
-
-    // =========================
-    // 📧 EMAIL AUTOMATIQUE
-    // =========================
-    if (email) {
-
-      // 📩 EMAIL CLIENT
-      await resend.emails.send({
-        from: "AeroNova <onboarding@resend.dev>",
-        to: email,
-        subject: "Your Private Jet Request✈️",
-        html: `
-          <h2>Your request has been received</h2>
-          <p>${reply}</p>
-          <p><strong>Continue here:</strong></p>
-          <a href="https://villiers.ai/?id=UZYHLB">
-            View Aircraft Options
-          </a>
-          <p style="margin-top:20px;">AeroNova Concierge</p>
-        `
+    try {
+      await fetch("https://script.google.com/macros/s/AKfycbxavit4SMkqMPvw5EUgLYGjaqfKMjMuM5RVDxhcndM7DQRTicsUBonQNVGZJsGD6aoKfg/exec", {
+        method: "POST",
+        body: JSON.stringify({
+          message,
+          email: email || "",
+          departure: departure || "",
+          destination: destination || "",
+          date: new Date().toISOString()
+        })
       });
-
-      // 📩 EMAIL TOI
-      await resend.emails.send({
-        from: "AeroNova <onboarding@resend.dev>",
-        to: "contact@jetclassaccess.com",
-        subject: "🔥 New Jet Lead",
-        html: `
-          <p><strong>Client:</strong> ${email}</p>
-          <p><strong>Route:</strong> ${departure} → ${destination}</p>
-          <p><strong>Message:</strong> ${message}</p>
-
-          <p>
-            👉 <a href="https://villiers.ai/?id=UZYHLB">
-            Open via Villiers Affiliate
-            </a>
-          </p>
-        `
-      });
+    } catch (err) {
+      console.log("Sheets error:", err.message);
     }
 
-    // ✅ Réponse finale au frontend
+    // =========================
+    // 📧 EMAIL (SAFE)
+    // =========================
+    if (email) {
+      try {
+        await resend.emails.send({
+          from: "AeroNova <onboarding@resend.dev>",
+          to: email,
+          subject: "Your Private Jet Request ✈️",
+          html: `<p>${reply}</p>
+                 <a href="https://villiers.ai/?id=UZYHLB">View Aircraft</a>`
+        });
+
+        await resend.emails.send({
+          from: "AeroNova <onboarding@resend.dev>",
+          to: "ton@email.com",
+          subject: "New Lead",
+          html: `<p>${email} - ${departure} → ${destination}</p>`
+        });
+
+      } catch (err) {
+        console.log("Email error:", err.message);
+      }
+    }
+
     return res.status(200).json({ reply });
 
   } catch (error) {
-    console.error("API ERROR:", error);
+    console.error("GLOBAL ERROR:", error);
     return res.status(500).json({
       error: error.message
     });
