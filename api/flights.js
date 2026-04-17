@@ -1,13 +1,9 @@
-export default async function handler(req, res) {
-  try {
-    const response = await fetch("https://api.villiers.ai/feeds/empty-legs?id=UZYHLB");
-    const xml = await response.text();
-
-    res.setHeader("Content-Type", "text/xml");
-    res.status(200).send(xml);
-
-  } catch (error) {
-    console.error("Flights API error:", error);
-    res.status(500).json({ error: "Failed to fetch flights" });
+export default function handler(req, res) {
+  if (req.method === 'GET') {
+    res.status(200).json({
+      message: "Flights API working"
+    });
+  } else {
+    res.status(405).json({ error: "Method not allowed" });
   }
 }
