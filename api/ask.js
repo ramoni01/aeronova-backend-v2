@@ -13,18 +13,74 @@ const parser = new Parser();
 
 const RSS_URL = "https://api.villiers.ai/feeds/empty-legs?id=UZYHLB.xml";
 
-// simple in-memory cache (works in serverless warm instances)
+// =========================
+// 🧠 EVENT DETECTION
+// =========================
+const EVENTS = [
+  {
+    name: "Monaco Grand Prix",
+    keywords: ["monaco", "f1", "grand prix"],
+  },
+  {
+    name: "Cannes Film Festival",
+    keywords: ["cannes", "film festival"],
+  },
+  {
+    name: "Davos (WEF)",
+    keywords: ["davos", "wef"],
+  },
+  {
+    name: "World Cup",
+    keywords: ["world cup", "fifa", "football"],
+  },
+  {
+    name: "Winter Olympics",
+    keywords: ["olympics", "cortina", "milano"],
+  }
+];
+
+function detectEvent(message) {
+  const msg = message.toLowerCase();
+  return EVENTS.find(event =>
+    event.keywords.some(k => msg.includes(k))
+  );
+}
+
+function getRoutes(event) {
+  if (!event) return [];
+
+  switch (event.name) {
+    case "Monaco Grand Prix":
+    case "Cannes Film Festival":
+      return ["London → Nice", "Paris → Nice", "Geneva → Nice"];
+
+    case "Davos (WEF)":
+      return ["London → Zurich", "Dubai → Zurich", "New York → Zurich"];
+
+    case "World Cup":
+      return ["New York → Miami", "Los Angeles → Dallas", "Toronto → Mexico City"];
+
+    case "Winter Olympics":
+      return ["London → Milan", "Paris → Venice", "Zurich → Milan"];
+
+    default:
+      return [];
+  }
+}
+
+// =========================
+// 📦 CACHE RSS
+// =========================
 let cache = {
   data: null,
   timestamp: 0
 };
 
-const CACHE_TTL = 60 * 1000; // 1 minute
+const CACHE_TTL = 60 * 1000;
 
 async function getRSS() {
   const now = Date.now();
 
-  // ✅ use cache if fresh
   if (cache.data && now - cache.timestamp < CACHE_TTL) {
     return cache.data;
   }
@@ -44,6 +100,9 @@ async function getRSS() {
   }
 }
 
+// =========================
+// 🚀 MAIN HANDLER
+// =========================
 export default async function handler(req, res) {
   try {
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -67,16 +126,87 @@ export default async function handler(req, res) {
     const query = message.toLowerCase();
 
     // =========================
-    // 1️⃣ RSS (FAST + CACHED)
-    // =========================
-    const items = await getRSS();
+// 🧠 1️⃣ EVENT DETECTION FIRST
+// =========================
+const event = detectEvent(message);
 
-    const match = items.find(item => {
-      const title = (item.title || "").toLowerCase();
-      const content = (item.content || "").toLowerCase();
-      return title.includes(query) || content.includes(query);
+if (event) {
+  // Check RSS for a real matching flight for this event
+  const items = await getRSS();
+  const match = items.find(item => {
+    const title = (item.title || "").toLowerCase();
+    const content = (item.content || "").toLowerCase();
+    return title.includes(query) || content.includes(query);
+  });
+
+  // Real flight found for this event
+  if (match) {
+    return res.status(200).json({
+      source: "rss+event",
+      reply: match.title || "Flight available",
+      data: { title: match.title, link: match.link, description: match.contentSnippet || "" },
+      button: { type: "book", url: match.link || "#" }
     });
+  }
 
+  // No real flight → return event routes
+  const routes = getRoutes(event);
+  return res.status(200).json({
+    source: "event",
+    reply: `Flights available for ${event.name}.\nPopular routes:\n- ${routes.join("\n- ")}`,
+    button: { type: "searching" }
+  });
+}
+
+// =========================
+// 2️⃣ RSS SEARCH (no event detected)
+// =========================
+const items = await getRSS();
+const match = items.find(item => {
+  const title = (item.title || "").toLowerCase();
+  const content = (item.content || "").toLowerCase();
+  return title.includes(query) || content.includes(query);
+});
+
+if (match) {
+
+    // =========================
+    // ✅ EVENT + RSS MATCH
+    // =========================
+    if (event && match) {
+      return res.status(200).json({
+        source: "rss+event",
+        reply: match.title || "Flight available",
+        data: {
+          title: match.title,
+          link: match.link,
+          description: match.contentSnippet || ""
+        },
+        button: {
+          type: "book",
+          url: match.link || "#"
+        }
+      });
+    }
+
+    // =========================
+    // 🟡 EVENT ONLY
+    // =========================
+    if (event) {
+      const routes = getRoutes(event);
+
+      return res.status(200).json({
+        source: "event",
+        reply: `Flights available for ${event.name}.\nPopular routes:\n- ${routes.join("\n- ")}`,
+        button: {
+          type: "searching"
+        }
+      });
+    }
+
+    // =========================
+    // 🟢 RSS ONLY
+    // =========================
     if (match) {
       return res.status(200).json({
         source: "rss",
@@ -94,31 +224,40 @@ export default async function handler(req, res) {
     }
 
     // =========================
-    // 2️⃣ OPENAI FALLBACK
+    // 🔵 OPENAI FALLBACK
     // =========================
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: `
-You are a flight assistant.
+    let aiReply = "No response";
 
-Return short, structured, useful answers.
-Do not mention marketing events.
-Focus on flights, private jets, availability.
-          `.trim()
-        },
-        {
-          role: "user",
-          content: message
-        }
-      ]
-    });
+    try {
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `
+You are a private aviation assistant.
+
+Give short, clear, premium answers.
+Focus on flights, availability, routes.
+            `.trim()
+          },
+          {
+            role: "user",
+            content: message
+          }
+        ]
+      });
+
+      aiReply = completion.choices?.[0]?.message?.content || "No result";
+
+    } catch (err) {
+      console.error("OpenAI ERROR:", err.message);
+      aiReply = "Service temporarily unavailable";
+    }
 
     return res.status(200).json({
       source: "openai",
-      reply: completion.choices[0].message.content,
+      reply: aiReply,
       button: {
         type: "searching"
       }
