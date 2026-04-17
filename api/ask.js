@@ -26,59 +26,51 @@ export default async function handler(req, res) {
       return res.status(400).json({
         reply: "No message provided",
         source: "error",
-        button: {
-          text: "Searching availability",
-          type: "searching"
-        }
+        button: { type: "searching" }
       });
     }
 
     const query = message.toLowerCase().trim();
 
-    // ======================
-    // 1️⃣ RSS SEARCH
-    // ======================
-    let rssMatch = null;
-
+    // =========================
+    // 1️⃣ RSS FIRST (HARD PRIORITY)
+    // =========================
     try {
       const feed = await parser.parseURL(RSS_URL);
 
-      rssMatch = feed.items.find(item => {
+      const match = feed.items.find(item => {
         const title = (item.title || "").toLowerCase();
         const content = (item.content || "").toLowerCase();
 
         return title.includes(query) || content.includes(query);
       });
 
-    } catch (e) {
-      console.log("RSS error:", e.message);
+      // ✅ IF FOUND → STOP HERE
+      if (match) {
+        return res.status(200).json({
+          source: "rss",
+          reply: match.title || "Found in RSS",
+          link: match.link || "#",
+          button: {
+            type: "book",
+            url: match.link || "#"
+          }
+        });
+      }
+
+    } catch (rssError) {
+      console.log("RSS error:", rssError.message);
     }
 
-    // ======================
-    // 2️⃣ IF FOUND IN RSS
-    // ======================
-    if (rssMatch) {
-      return res.status(200).json({
-        source: "rss",
-        reply: rssMatch.title || "Found in RSS",
-        link: rssMatch.link || null,
-        button: {
-          text: "Book now",
-          type: "book",
-          url: rssMatch.link || "#"
-        }
-      });
-    }
-
-    // ======================
-    // 3️⃣ FALLBACK OPENAI
-    // ======================
+    // =========================
+    // 2️⃣ FALLBACK → OPENAI
+    // =========================
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
-          content: "You are a helpful assistant for travel and flight queries."
+          content: "You are a smart travel assistant. Answer briefly and clearly."
         },
         {
           role: "user",
@@ -91,7 +83,6 @@ export default async function handler(req, res) {
       source: "openai",
       reply: completion.choices[0].message.content,
       button: {
-        text: "Searching availability",
         type: "searching"
       }
     });
@@ -100,10 +91,7 @@ export default async function handler(req, res) {
     return res.status(500).json({
       source: "error",
       reply: "Server error",
-      button: {
-        text: "Searching availability",
-        type: "searching"
-      },
+      button: { type: "searching" },
       details: err.message
     });
   }
