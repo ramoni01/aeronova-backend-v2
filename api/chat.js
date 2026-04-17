@@ -1,46 +1,40 @@
 import OpenAI from "openai";
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   try {
-    const { message } = req.body;
+    const { message, history = [], system } = req.body;
 
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY
-    });
+    if (!message) {
+      return res.status(200).json({ reply: "No message provided" });
+    }
 
-    const SYSTEM_PROMPT = `
-You are a luxury private jet concierge.
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-STRICT RULES:
-- Max 8 words
-- 1 sentence only
-- Use USD ($)
-- No verbs like "starts at", "is", "offers"
-- Format: Route + price + short question
-- Example: "Paris–Nice $9,000 — fly when?"
-`;
+    const messages = [
+      { role: "system", content: system || "You are a luxury private jet concierge." },
+      ...history.slice(-10), // last 10 messages for context
+      { role: "user", content: message }
+    ];
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4.1-mini",
-      max_tokens: 20,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: message }
-      ]
+      model: "gpt-4o-mini",
+      max_tokens: 150,
+      messages
     });
 
-    const reply = completion.choices[0].message.content;
-
-    return res.status(200).json({ reply });
+    return res.status(200).json({
+      reply: completion.choices[0].message.content
+    });
 
   } catch (error) {
     console.error("API ERROR:", error);
-    return res.status(500).json({
-      error: error.message
-    });
+    return res.status(500).json({ reply: "Service temporarily unavailable" });
   }
 }
