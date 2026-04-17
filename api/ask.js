@@ -8,7 +8,7 @@ const openai = new OpenAI({
 const parser = new Parser();
 
 // 🔴 PUT YOUR RSS FEED HERE
-const RSS_URL = "https://your-rss-feed.com/rss.xml";
+const RSS_URL = "https://api.villiers.ai/feeds/empty-legs?id=UZYHLB.xml";
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
