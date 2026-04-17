@@ -7,8 +7,8 @@ const openai = new OpenAI({
 
 const parser = new Parser();
 
-// 🔴 YOUR RSS FEED
-const RSS_URL = "https://api.villiers.ai/feeds/empty-legs?id=UZYHLB.xml";
+// 🔴 PUT YOUR RSS FEED HERE
+const RSS_URL = "https://your-rss-feed.com/rss.xml";
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -24,8 +24,8 @@ export default async function handler(req, res) {
 
     if (!message) {
       return res.status(400).json({
-        reply: "No message provided",
         source: "error",
+        reply: "No message provided",
         button: { type: "searching" }
       });
     }
@@ -33,7 +33,7 @@ export default async function handler(req, res) {
     const query = message.toLowerCase().trim();
 
     // =========================
-    // 1️⃣ RSS FIRST (HARD PRIORITY)
+    // 1️⃣ RSS FIRST (STRICT)
     // =========================
     try {
       const feed = await parser.parseURL(RSS_URL);
@@ -45,11 +45,10 @@ export default async function handler(req, res) {
         return title.includes(query) || content.includes(query);
       });
 
-      // ✅ IF FOUND → STOP HERE
       if (match) {
         return res.status(200).json({
           source: "rss",
-          reply: match.title || "Found in RSS",
+          reply: match.title || "Result found",
           link: match.link || "#",
           button: {
             type: "book",
@@ -57,20 +56,26 @@ export default async function handler(req, res) {
           }
         });
       }
-
     } catch (rssError) {
       console.log("RSS error:", rssError.message);
     }
 
     // =========================
-    // 2️⃣ FALLBACK → OPENAI
+    // 2️⃣ OPENAI FALLBACK
     // =========================
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
-          content: "You are a smart travel assistant. Answer briefly and clearly."
+          content: `
+You are a travel assistant.
+
+- Help users find flights and travel availability
+- Be clear and concise
+- Do not mention marketing events or promotions
+- If no data is available, suggest checking availability
+          `.trim()
         },
         {
           role: "user",
